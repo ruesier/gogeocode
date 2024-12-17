@@ -2,6 +2,7 @@
 package gogeocode
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -62,9 +63,14 @@ var (
 // Geocode takes a string description of a location and returns precise location data.
 // Possible queries include addresses or famous place names.
 func (c Client) Geocode(query string) ([]*Response, error) {
+	return c.GeocodeWithContext(context.Background(), query)
+}
+
+// GeocodeWithContext performs the same request as Geocode using the given context.
+func (c Client) GeocodeWithContext(ctx context.Context, query string) ([]*Response, error) {
 	var results []*Response
 
-	resp, err := callAPI(buildGeocodeURL(query, c.ApiKey))
+	resp, err := callAPI(ctx, buildGeocodeURL(query, c.ApiKey))
 	if err != nil {
 		return results, err
 	}
@@ -78,33 +84,38 @@ func (c Client) Geocode(query string) ([]*Response, error) {
 	return results, err
 }
 
-// Geocode a specific address.
+// AddressGeocode geocodes a specific address.
 func (c Client) AddressGeocode(street, city, county, state, country, postalcode string) ([]*Response, error) {
+	return c.AddressGeocodeWithContext(context.Background(), street, city, county, state, country, postalcode)
+}
+
+// AddressGeocodeWithContext performs same action as AddressGeocode with provided context
+func (c Client) AddressGeocodeWithContext(ctx context.Context, street, city, county, state, country, postalcode string) ([]*Response, error) {
 	var fields []string
 	if len(street) > 0 {
-		fields = append(fields, "street=" + strings.ReplaceAll(street, " ", "+"))
+		fields = append(fields, "street="+strings.ReplaceAll(street, " ", "+"))
 	}
 	if len(city) > 0 {
-		fields = append(fields, "city=" + strings.ReplaceAll(city, " ", "+"))
+		fields = append(fields, "city="+strings.ReplaceAll(city, " ", "+"))
 	}
 	if len(county) > 0 {
-		fields = append(fields, "county=" + strings.ReplaceAll(county, " ", "+"))
+		fields = append(fields, "county="+strings.ReplaceAll(county, " ", "+"))
 	}
 	if len(state) > 0 {
-		fields = append(fields, "state=" + strings.ReplaceAll(state, " ", "+"))
+		fields = append(fields, "state="+strings.ReplaceAll(state, " ", "+"))
 	}
 	if len(country) > 0 {
-		fields = append(fields, "country=" + strings.ReplaceAll(country, " ", "+"))
+		fields = append(fields, "country="+strings.ReplaceAll(country, " ", "+"))
 	}
 	if len(postalcode) > 0 {
-		fields = append(fields, "postalcode=" + strings.ReplaceAll(postalcode, " ", "+"))
+		fields = append(fields, "postalcode="+strings.ReplaceAll(postalcode, " ", "+"))
 	}
-	fields = append(fields, "api_key=" + c.ApiKey)
+	fields = append(fields, "api_key="+c.ApiKey)
 	url := "https://geocode.maps.co/search?" + strings.Join(fields, "&")
 
 	var results []*Response
 
-	resp, err := callAPI(url)
+	resp, err := callAPI(ctx, url)
 	if err != nil {
 		return results, err
 	}
@@ -122,11 +133,15 @@ func buildReverseURL(lat, long float64, key string) string {
 	return fmt.Sprintf("https://geocode.maps.co/reverse?lat=%f&lon=%f&api_key=%s", lat, long, key)
 }
 
-// Reverse takes a latitude and longitude and returns nearest address
 func (c Client) Reverse(lat, long float64) (*Response, error) {
+	return c.ReverseWithContext(context.Background(), lat, long)
+}
+
+// Reverse takes a latitude and longitude and returns nearest address
+func (c Client) ReverseWithContext(ctx context.Context, lat, long float64) (*Response, error) {
 	var result *Response
 
-	resp, err := callAPI(buildReverseURL(lat, long, c.ApiKey))
+	resp, err := callAPI(ctx, buildReverseURL(lat, long, c.ApiKey))
 	if err != nil {
 		return result, err
 	}
@@ -141,9 +156,9 @@ func (c Client) Reverse(lat, long float64) (*Response, error) {
 	return result, err
 }
 
-func callAPI(url string) (*http.Response, error) {
+func callAPI(ctx context.Context, url string) (*http.Response, error) {
 	// Build the request
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
