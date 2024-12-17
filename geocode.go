@@ -1,3 +1,4 @@
+// Package gogeocode provides utilities for utilizing the geocoding API provided through https://geocode.maps.co.
 package gogeocode
 
 import (
@@ -9,10 +10,12 @@ import (
 	"strings"
 )
 
+// Client is used to call geocoding api
 type Client struct {
 	ApiKey string
 }
 
+// Address is apart of the Revese response
 type Address struct {
 	HouseNumber    string `json:"house_number"`
 	Road           string `json:"road"`
@@ -27,6 +30,7 @@ type Address struct {
 	CountryCode    string `json:"country_code"`
 }
 
+// Response contains all possible fields returned by the API
 type Response struct {
 	PlaceID     uint64   `json:"place_id"`
 	Licence     string   `json:"licence"`
@@ -39,7 +43,8 @@ type Response struct {
 	Class       string   `json:"class"`
 	Type        string   `json:"type"`
 	Importance  float64  `json:"importance"`
-	Address     Address  `json:"address"`
+	// Address is only included when calling Reverse
+	Address Address `json:"address"`
 }
 
 func buildGeocodeURL(query, key string) string {
@@ -48,42 +53,60 @@ func buildGeocodeURL(query, key string) string {
 }
 
 var (
-	ErrThrottle = errors.New("Geocode failed due to exceeding rquest limit")
-	ErrTraffic  = errors.New("Geocode failed due to high traffic on geocode server")
-	ErrFlooding = errors.New("Geocode has detected api key abuse, contact: https://maps.co/contact/ to resolve")
+	ErrAuthorization = errors.New("Geocode invalid API Key")
+	ErrThrottle      = errors.New("Geocode failed due to exceeding rquest limit")
+	ErrTraffic       = errors.New("Geocode failed due to high traffic on geocode server")
+	ErrFlooding      = errors.New("Geocode has detected api key abuse, contact: https://maps.co/contact/ to resolve")
 )
 
+// Geocode takes a string description of a location and returns precise location data.
+// Possible queries include addresses or famous place names.
 func (c Client) Geocode(query string) ([]*Response, error) {
 	var results []*Response
 
-	// Build the request
-	req, err := http.NewRequest("GET", buildGeocodeURL(query, c.ApiKey), nil)
+	resp, err := callAPI(buildGeocodeURL(query, c.ApiKey))
 	if err != nil {
 		return results, err
 	}
 
-	// For control over HTTP client headers, redirect policy, and other settings, create a Client
-	// A Client is an HTTP client
-	client := &http.Client{}
+	// Callers should close resp.Body when done reading from it
+	// Defer the closing of the body
+	defer resp.Body.Close()
 
-	// Send the request via a client
-	// Do sends an HTTP request and returns an HTTP response
-	resp, err := client.Do(req)
+	// Use json.Decode for reading streams of JSON data
+	err = json.NewDecoder(resp.Body).Decode(&results)
+	return results, err
+}
+
+// Geocode a specific address.
+func (c Client) AddressGeocode(street, city, county, state, country, postalcode string) ([]*Response, error) {
+	var fields []string
+	if len(street) > 0 {
+		fields = append(fields, "street=" + strings.ReplaceAll(street, " ", "+"))
+	}
+	if len(city) > 0 {
+		fields = append(fields, "city=" + strings.ReplaceAll(city, " ", "+"))
+	}
+	if len(county) > 0 {
+		fields = append(fields, "county=" + strings.ReplaceAll(county, " ", "+"))
+	}
+	if len(state) > 0 {
+		fields = append(fields, "state=" + strings.ReplaceAll(state, " ", "+"))
+	}
+	if len(country) > 0 {
+		fields = append(fields, "country=" + strings.ReplaceAll(country, " ", "+"))
+	}
+	if len(postalcode) > 0 {
+		fields = append(fields, "postalcode=" + strings.ReplaceAll(postalcode, " ", "+"))
+	}
+	fields = append(fields, "api_key=" + c.ApiKey)
+	url := "https://geocode.maps.co/search?" + strings.Join(fields, "&")
+
+	var results []*Response
+
+	resp, err := callAPI(url)
 	if err != nil {
 		return results, err
-	}
-
-	switch resp.StatusCode {
-	case 429:
-		return results, ErrThrottle
-	case 503:
-		return results, ErrTraffic
-	case 403:
-		return results, ErrFlooding
-	}
-
-	if resp.StatusCode >= 400 {
-		return results, fmt.Errorf("unrecognized error {StatusCode: %d}", resp.StatusCode)
 	}
 
 	// Callers should close resp.Body when done reading from it
@@ -99,37 +122,13 @@ func buildReverseURL(lat, long float64, key string) string {
 	return fmt.Sprintf("https://geocode.maps.co/reverse?lat=%f&lon=%f&api_key=%s", lat, long, key)
 }
 
+// Reverse takes a latitude and longitude and returns nearest address
 func (c Client) Reverse(lat, long float64) (*Response, error) {
 	var result *Response
 
-	// Build the request
-	req, err := http.NewRequest("GET", buildReverseURL(lat, long, c.ApiKey), nil)
+	resp, err := callAPI(buildReverseURL(lat, long, c.ApiKey))
 	if err != nil {
 		return result, err
-	}
-
-	// For control over HTTP client headers, redirect policy, and other settings, create a Client
-	// A Client is an HTTP client
-	client := &http.Client{}
-
-	// Send the request via a client
-	// Do sends an HTTP request and returns an HTTP response
-	resp, err := client.Do(req)
-	if err != nil {
-		return result, err
-	}
-
-	switch resp.StatusCode {
-	case 429:
-		return result, ErrThrottle
-	case 503:
-		return result, ErrTraffic
-	case 403:
-		return result, ErrFlooding
-	}
-
-	if resp.StatusCode >= 400 {
-		return result, fmt.Errorf("unrecognized error {StatusCode: %d}", resp.StatusCode)
 	}
 
 	// Callers should close resp.Body when done reading from it
@@ -140,4 +139,39 @@ func (c Client) Reverse(lat, long float64) (*Response, error) {
 	// Use json.Decode for reading streams of JSON data
 	err = json.NewDecoder(resp.Body).Decode(result)
 	return result, err
+}
+
+func callAPI(url string) (*http.Response, error) {
+	// Build the request
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	// For control over HTTP client headers, redirect policy, and other settings, create a Client
+	// A Client is an HTTP client
+	client := &http.Client{}
+
+	// Send the request via a client
+	// Do sends an HTTP request and returns an HTTP response
+	resp, err := client.Do(req)
+	if err != nil {
+		return resp, err
+	}
+
+	switch resp.StatusCode {
+	case 401:
+		return resp, ErrAuthorization
+	case 429:
+		return resp, ErrThrottle
+	case 503:
+		return resp, ErrTraffic
+	case 403:
+		return resp, ErrFlooding
+	}
+
+	if resp.StatusCode >= 400 {
+		return resp, fmt.Errorf("unrecognized error {StatusCode: %d}", resp.StatusCode)
+	}
+
+	return resp, nil
 }
