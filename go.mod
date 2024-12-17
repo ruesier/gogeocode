@@ -1,4 +1,4 @@
-module github.com/devoncall/gogeocode
+module github.com/ruesier/gogeocode
 
 go 1.23.4
 
