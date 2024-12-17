@@ -133,11 +133,11 @@ func buildReverseURL(lat, long float64, key string) string {
 	return fmt.Sprintf("https://geocode.maps.co/reverse?lat=%f&lon=%f&api_key=%s", lat, long, key)
 }
 
+// Reverse takes a latitude and longitude and returns nearest address
 func (c Client) Reverse(lat, long float64) (*Response, error) {
 	return c.ReverseWithContext(context.Background(), lat, long)
 }
 
-// Reverse takes a latitude and longitude and returns nearest address
 func (c Client) ReverseWithContext(ctx context.Context, lat, long float64) (*Response, error) {
 	var result *Response
 
