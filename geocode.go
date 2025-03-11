@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
+	"strconv"
 )
 
 // Client is used to call geocoding api
@@ -48,9 +48,17 @@ type Response struct {
 	Address Address `json:"address"`
 }
 
-func buildGeocodeURL(query, key string) string {
-	safequery := url.QueryEscape(strings.ReplaceAll(query, " ", "+"))
-	return "https://geocode.maps.co/search?q=" + safequery + "&api_key=" + key
+func buildGeocodeURL(query, key string) url.URL {
+	vals := url.Values{
+		"q": {query},
+	}
+	vals.Set("api_key", key)
+	return url.URL{
+		Scheme:   "https",
+		Host:     "geocode.maps.co",
+		Path:     "search",
+		RawQuery: vals.Encode(),
+	}
 }
 
 var (
@@ -91,27 +99,33 @@ func (c Client) AddressGeocode(street, city, county, state, country, postalcode 
 
 // AddressGeocodeWithContext performs same action as AddressGeocode with provided context
 func (c Client) AddressGeocodeWithContext(ctx context.Context, street, city, county, state, country, postalcode string) ([]*Response, error) {
-	var fields []string
+	query := url.Values{}
+	query.Set("api_key", c.ApiKey)
 	if len(street) > 0 {
-		fields = append(fields, "street="+strings.ReplaceAll(street, " ", "+"))
+		query.Set("street", street)
 	}
 	if len(city) > 0 {
-		fields = append(fields, "city="+strings.ReplaceAll(city, " ", "+"))
+		query.Set("city", city)
 	}
 	if len(county) > 0 {
-		fields = append(fields, "county="+strings.ReplaceAll(county, " ", "+"))
+		query.Set("county", county)
 	}
 	if len(state) > 0 {
-		fields = append(fields, "state="+strings.ReplaceAll(state, " ", "+"))
+		query.Set("state", state)
 	}
 	if len(country) > 0 {
-		fields = append(fields, "country="+strings.ReplaceAll(country, " ", "+"))
+		query.Set("country", country)
 	}
 	if len(postalcode) > 0 {
-		fields = append(fields, "postalcode="+strings.ReplaceAll(postalcode, " ", "+"))
+		query.Set("postalcode", postalcode)
 	}
-	fields = append(fields, "api_key="+c.ApiKey)
-	url := "https://geocode.maps.co/search?" + strings.Join(fields, "&")
+
+	url := url.URL{
+		Scheme:   "https",
+		Host:     "geocode.maps.co",
+		Path:     "search",
+		RawQuery: query.Encode(),
+	}
 
 	var results []*Response
 
@@ -129,8 +143,18 @@ func (c Client) AddressGeocodeWithContext(ctx context.Context, street, city, cou
 	return results, err
 }
 
-func buildReverseURL(lat, long float64, key string) string {
-	return fmt.Sprintf("https://geocode.maps.co/reverse?lat=%f&lon=%f&api_key=%s", lat, long, key)
+func buildReverseURL(lat, long float64, key string) url.URL {
+	vals := url.Values{
+		"lat": {strconv.FormatFloat(lat, 'f', -1, 64)},
+		"lon": {strconv.FormatFloat(long, 'f', -1, 64)},
+	}
+	vals.Set("api_key", key)
+	return url.URL{
+		Scheme:   "https",
+		Host:     "geocode.maps.co",
+		Path:     "reverse",
+		RawQuery: vals.Encode(),
+	}
 }
 
 // Reverse takes a latitude and longitude and returns nearest address
@@ -156,31 +180,24 @@ func (c Client) ReverseWithContext(ctx context.Context, lat, long float64) (*Res
 	return result, err
 }
 
-func callAPI(ctx context.Context, url string) (*http.Response, error) {
-	// Build the request
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+func callAPI(ctx context.Context, url url.URL) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url.String(), nil)
 	if err != nil {
 		return nil, err
 	}
-	// For control over HTTP client headers, redirect policy, and other settings, create a Client
-	// A Client is an HTTP client
-	client := &http.Client{}
-
-	// Send the request via a client
-	// Do sends an HTTP request and returns an HTTP response
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return resp, err
 	}
 
 	switch resp.StatusCode {
-	case 401:
+	case http.StatusUnauthorized:
 		return resp, ErrAuthorization
-	case 429:
+	case http.StatusTooManyRequests:
 		return resp, ErrThrottle
-	case 503:
+	case http.StatusServiceUnavailable:
 		return resp, ErrTraffic
-	case 403:
+	case http.StatusForbidden:
 		return resp, ErrFlooding
 	}
 

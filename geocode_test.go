@@ -2,14 +2,28 @@ package gogeocode
 
 import (
 	"encoding/json"
+	"flag"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 )
 
+var APIKEY string
+
+func TestMain(m *testing.M) {
+	APIKEY = os.Getenv("GEOCODE_APIKEY")
+	flag.StringVar(&APIKEY, "api", APIKEY, "provide an API key for testing")
+	flag.Parse()
+
+	os.Exit(m.Run())
+}
+
 func TestGeocode(t *testing.T) {
-	testClient := Client{}
+	testClient := Client{
+		ApiKey: APIKEY,
+	}
 	// https://geocode.maps.co/search?q=555+5th+Ave+New+York+NY+10017+US&api_key=
 	got, err := testClient.Geocode("555 5th Ave New York NY 10017 US")
 	if err != nil {
@@ -25,7 +39,9 @@ func TestGeocode(t *testing.T) {
 }
 
 func TestAddressGeocode(t *testing.T) {
-	testClient := Client{}
+	testClient := Client{
+		ApiKey: APIKEY,
+	}
 	// https://geocode.maps.co/search?street=555+5th+Ave&city=New+York&state=NY&postalcode=10017&country=US&api_key=
 	got, err := testClient.AddressGeocode("555 5th Ave", "New York", "", "NY", "US", "10017")
 	if err != nil {
@@ -41,7 +57,9 @@ func TestAddressGeocode(t *testing.T) {
 }
 
 func TestReverse(t *testing.T) {
-	testClient := Client{}
+	testClient := Client{
+		ApiKey: APIKEY,
+	}
 	// https://geocode.maps.co/reverse?lat=40.7558017&lon=-73.9787414&api_key=
 	got, err := testClient.Reverse(40.7558017, -73.9787414)
 	if err != nil {
@@ -55,4 +73,3 @@ func TestReverse(t *testing.T) {
 		t.Fatal(diff)
 	}
 }
-
