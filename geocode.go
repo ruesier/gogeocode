@@ -18,6 +18,7 @@ type Client struct {
 
 // Address is apart of the Revese response
 type Address struct {
+	Tourism        string `json:"tourism"`
 	HouseNumber    string `json:"house_number"`
 	Road           string `json:"road"`
 	Neighbourhood  string `json:"neighbourhood"`
