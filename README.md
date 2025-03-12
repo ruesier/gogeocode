@@ -1,10 +1,13 @@
 # GoGeocode
+
 simple go package for using the geocoding api at [geocode.maps.co]
 
 ## API Key
+
 You can sign up for an api key at: [https://geocode.maps.co/join/]
 
 ## Geocode
+
 Geocoding takes an address or similar location description, then returns a precise location description
 
 ```go
@@ -24,9 +27,11 @@ func main() {
     fmt.Printf("The Statue of Liberty is at Lat: %s, Long: %s", response[0].Latitude, response[0].Longitude)
 }
 ```
+
 Output: `The Statue of Liberty is at Lat: 40.689253199999996, Long: -74.04454817144321`
 
 ## Reverse Geocode
+
 Reverse Geocoding takes a latitude and longitude then returns Addresses that are at that point.
 
 ```go
@@ -45,4 +50,5 @@ func main() {
     fmt.Println(respose.Address.Tourism)
 }
 ```
+
 Output: `Statue of Liberty`
